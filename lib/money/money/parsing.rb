@@ -32,28 +32,156 @@ class Money
       # @see Money.from_string
       #
       def parse(input, currency = nil)
+        # parse string into array of Money objects
+        result_array = parse_array(input, currency)
+        
+        # if only one result - return it
+        return result_array.first if result_array.size == 1
+        
+        # if no result - return empty
+        return new (0) if result_array.size == 0
+        
+        # if multiple results - return array
+        return nil
+      end
+
+      # Parses the current string and converts it to +Array+ of +Money+ objects.
+      # Excess characters will be discarded.
+      #
+      # @param [String, #to_s] input The input to parse.
+      # @param [Currency, String, Symbol] currency The currency format.
+      #   The currency to set the resulting +Money+ object to.
+      #
+      # @return [Array]
+      #
+      # @raise [ArgumentError] If any +currency+ is supplied and
+      #   given value doesn't match the one extracted from
+      #   the +input+ string.
+      #
+      # @example
+      #   parse_array('100')                #=> [#<Money @cents=10000>]
+      #   parse_array('100.37')             #=> [#<Money @cents=10037>]
+      #   parse_array('100 USD')            #=> [#<Money @cents=10000, @currency=#<Money::Currency id: usd>>]
+      #   parse_array('USD 100')            #=> [#<Money @cents=10000, @currency=#<Money::Currency id: usd>>]
+      #   parse_array('$100 USD')           #=> [#<Money @cents=10000, @currency=#<Money::Currency id: usd>>]
+      #   parse_array('hello 2000 world')   #=> [#<Money @cents=200000 @currency=#<Money::Currency id: usd>>]
+      #   parse_array('$100 and 300 EUR')   #=> [#<Money @cents=10000 @currency=#<Money::Currency id: usd>>, 
+      #                                          #<Money @cents=30000 @currency=#<Money::Currency id: eur>>]
+      #
+      # @example Mismatching currencies
+      #   parse_array('USD 2000', "EUR")    #=> ArgumentError
+      #
+      # @see Money.from_string
+      #
+      def parse_array(input, currency = nil)
+        values = extract_values(input)
+        result = extract_money(values, currency)
+        
+        result
+      end
+      
+      # Parses the current string and converts it to +Array+ of +String+ objects.
+      # Excess characters will be discarded.
+      #
+      # @param [String, #to_s] input The input to parse.
+      #
+      # @return [Array]
+      #
+      # @example
+      #   extract_values('100')              #=> ["100"]
+      #   extract_values('100.37')           #=> ["100.37"]
+      #   extract_values('100 USD')          #=> ["100 USD"]
+      #   extract_values('USD 100')          #=> ["USD 100"]
+      #   extract_values('$100 USD')         #=> ["$100"]
+      #   extract_values('hello 2000 world') #=> ["2000"]
+      #   extract_values('$100 and 300 EUR') #=> ["$100", "300 EUR"]
+      #
+      # @example Mismatching currencies
+      #   extract_values('USD 2000') #=> ArgumentError
+      #
+      def extract_values(input)
+        initialize_regexp
+
         i = input.to_s
 
         # Get the currency.
-        m = i.scan /([A-Z]{2,3})/
-          c = m[0] ? m[0][0] : nil
+        m = i.scan @regexp[:values]
+        
+        m.map{ |match| match[0] }
+      end
 
-        # check that currency passed and embedded currency are the same,
-        # and negotiate the final currency
-        if currency.nil? and c.nil?
-          currency = Money.default_currency
-        elsif currency.nil?
-          currency = c
-        elsif c.nil?
-          currency = currency
-        elsif currency != c
-          # TODO: ParseError
-          raise ArgumentError, "Mismatching Currencies"
+      # Parses input string or array of strings and converts it to +Array+ of +Money+ object.
+      # Excess characters will be discarded.
+      #
+      # @param [String, Array, #to_s] input The input to parse.
+      # @param [Currency, String, Symbol] currency The currency format.
+      #   The currency to set the resulting +Money+ object to.
+      #
+      # @return [Array]
+      #
+      # @raise [ArgumentError] If any +currency+ is supplied and
+      #   given value doesn't match the one extracted from
+      #   the +input+ string.
+      #
+      # @example
+      #   extract_money('100')                 #=> [#<Money @cents=10000>]
+      #   extract_money('100.37')              #=> [#<Money @cents=10037>]
+      #   extract_money('100 USD')             #=> [#<Money @cents=10000, @currency=#<Money::Currency id: usd>>]
+      #   extract_money('USD 100')             #=> [#<Money @cents=10000, @currency=#<Money::Currency id: usd>>]
+      #   extract_money('$100 USD')            #=> [#<Money @cents=10000, @currency=#<Money::Currency id: usd>>]
+      #   extract_money('hello 2000 world')    #=> [#<Money @cents=200000 @currency=#<Money::Currency id: usd>>]
+      #   extract_money(['EUR 2000', '$10'])   #=> [#<Money @cents=200000 @currency=#<Money::Currency id: eur>>,
+      #                                             #<Money @cents=1000 @currency=#<Money::Currency id: usd>>]
+      #
+      # @example Mismatching currencies
+      #   parse_array('USD 2000', "EUR")    #=> ArgumentError
+      #
+      def extract_money(input, currency = nil)
+        initialize_regexp
+
+        i = input
+        i = [i.to_s] unless i.is_a? Array
+
+        # Initialize array for parsing results
+        result = []
+
+        # Loop through every match
+        i.each do |value| 
+
+          currency_match = value.scan @regexp[:currency]
+          cents_match = value.scan @regexp[:cents]
+
+          if (currency_match[0])
+            # First, find currency by symbol (eg. '$')
+            c = Currency.find_by_symbol(currency_match[0])
+            # If it is not found, find by id (eg. 'USD')
+            c = Currency.find(currency_match[0]) unless c
+          else
+            c = nil
+          end
+
+          cents = (cents_match[0] ? cents_match[0] : nil)
+
+          # check that currency passed and embedded currency are the same,
+          # and negotiate the final currency
+          if currency.nil? and c.nil?
+            c = Money.default_currency
+          elsif currency.nil?
+            c = c
+          elsif c.nil?
+            c = currency
+          elsif currency != c
+            # TODO: ParseError
+            raise ArgumentError, "Mismatching Currencies"
+          end
+          c = Money::Currency.wrap(c)
+          cents = extract_cents(cents, c)
+
+          result << new(cents, c)
         end
-        currency = Money::Currency.wrap(currency)
 
-        cents = extract_cents(i, currency)
-        new(cents, currency)
+        # if multiple results - return array
+        return result
       end
 
       # Converts a String into a Money object treating the +value+
@@ -344,6 +472,70 @@ class Money
         # if negative, multiply by -1; otherwise, return positive cents
         negative ? cents * -1 : cents
       end
+
+      private
+        
+        def initialize_regexp
+          unless defined? @regexp
+            
+            # Get iso codes from Currency table
+            iso_codes = Currency::TABLE.values.select{ |c| c and c[:iso_code] }\
+                                              .map{ |c| Regexp.escape c[:iso_code] }
+
+            # Get symbols from Currency table
+            symbols   = Currency::TABLE.values.select{ |c| c and c[:symbol] }\
+                                              .map{ |c| Regexp.escape c[:symbol] }\
+                                              .sort.reverse
+
+            # Merge data
+            titles = iso_codes + symbols
+
+            # Regexp for currencies (e.g. EUR or $)
+            regexp_currency_titles = titles.join('|')
+
+            # Regexp for numbers with thousand separators ',' (e.g. 1,145,256)
+            regexp_number_with_thousands_1 = '(?:(?:[0-9]{1,2},){1}(?:[0-9]{3},)+?[0-9]{3})'
+            # Regexp for numbers with thousand separator '.' (e.g. 1.145.256)
+            regexp_number_with_thousands_2 = '(?:(?:[0-9]{1,2}\.){1}(?:[0-9]{3}\.)+?[0-9]{3})'
+            # Regexp for numbers with thousand separator ',' and decimal '.' (e.g. 15,124,836.15)
+            regexp_number_with_decimal_and_thousands_1 = '(?:(?:[0-9]{1,2},){1}(?:[0-9]{3},)+?[0-9]{3}\.[0-9]*)'
+            # Regexp for numbers with thousand separator '.' and decimal ',' (e.g. 15.124.836,15)
+            regexp_number_with_decimal_and_thousands_2 = '(?:(?:[0-9]{1,2}\.){1}(?:[0-9]{3}\.)+?[0-9]{3},[0-9]*)'
+            # Regexp for numbers with decimal separator ',', '.' or without (e.g. 1512436,15 or 42347.12 or 12)
+            regexp_number_with_decimal_only = '(?:[0-9]+(?:[.,][0-9]*)?)'
+
+            regexp_currency = "(?:#{regexp_currency_titles})"
+            
+            # Regexp for value boundaries (start)
+            regexp_boundary_begin = '(?:^|\s)'
+            # Regexp for value boundaries (end)
+            regexp_boundary_end = '(?:$|\s|[.,!?])'
+
+            # Regexp for number
+            regexp_number = "(?:#{regexp_number_with_decimal_and_thousands_1}|" + \
+                               "#{regexp_number_with_decimal_and_thousands_2}|" + \
+                               "#{regexp_number_with_thousands_1}|" + \
+                               "#{regexp_number_with_thousands_2}|" + \
+                               "#{regexp_number_with_decimal_only})"
+
+            # Regexp for number with currency in the beginning (e.g. EUR 100.12)
+            regexp_currency_before = "#{regexp_currency}\\s*#{regexp_number}"
+            # Regexp for number with currency in the end (e.g. 45.14 Ls)
+            regexp_currency_after = "#{regexp_number}\\s*#{regexp_currency}"
+            # Regexp for number without currency (e.g. 99.87)
+            regexp_currency_none = "#{regexp_number}"
+            
+            # Regexp for all types of numbers and currency
+            regexp_group = "#{regexp_currency_before}|#{regexp_currency_after}|#{regexp_number}"
+
+            # Resulting object with different regexp's
+            @regexp = {
+              :values => Regexp.new("(?:#{regexp_boundary_begin}(#{regexp_group})#{regexp_boundary_end})", Regexp::IGNORECASE),
+              :currency => Regexp.new("#{regexp_currency}"),
+              :cents => Regexp.new("#{regexp_number}")
+            }
+          end
+        end
 
     end
   end

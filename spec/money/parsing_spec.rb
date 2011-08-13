@@ -9,8 +9,9 @@ describe Money do
       five_ninety_five = Money.new(595, 'EUR')
 
       Money.parse('EUR 5,95').should    == five_ninety_five
+      Money.parse('€5,95').should       == five_ninety_five
+      
       #TODO: try and handle these
-      #Money.parse('€5,95').should       == five_ninety_five
       #Money.parse('&#036;5.95').should  == five_ninety_five
     end
 
@@ -36,12 +37,6 @@ describe Money do
       Money.parse('1,111,234,567.89').should == Money.new(111123456789, 'USD')
     end
 
-    it "should not return a price if there is a price range" do
-      lambda {Money.parse('$5.95-10.95')}.should    raise_error ArgumentError
-      lambda {Money.parse('$5.95 - 10.95')}.should  raise_error ArgumentError
-      lambda {Money.parse('$5.95 - $10.95')}.should raise_error ArgumentError
-    end
-
     it "should not return a price for completely invalid input" do
       # TODO: shouldn't these throw an error instead of being considered
       # equal to $0.0?
@@ -51,6 +46,41 @@ describe Money do
       Money.parse('hellothere').should    == empty_price
       Money.parse('').should              == empty_price
     end
+  end
+  
+  describe "Money.parse_array" do
+    
+    it "should be able to parse multiple values from string" do
+      six_twenty_five_usd = Money.new(625, 'USD')
+      one_hundred_fifty_eur = Money.new(15000, 'EUR')
+      one_and_forty_lvl = Money.new(140, 'LVL')
+      
+      two_values = [six_twenty_five_usd, one_hundred_fifty_eur]
+      three_values = [six_twenty_five_usd, one_hundred_fifty_eur, one_and_forty_lvl]
+            
+      Money.parse_array('$ 6.25 and EUR 150.00').should     == two_values
+      Money.parse_array('USD 6.25, EUR 150.00').should      == two_values      
+      Money.parse_array('$6.25 as well as € 150.00').should == two_values
+      Money.parse_array('$6.25 and 150 EUR').should         == two_values
+      Money.parse_array('$6.25, €150.00').should            == two_values
+      Money.parse_array('$ 6.25 + €150.00').should          == two_values
+      
+      Money.parse_array('$ 6.25 and EUR 150.00 and Ls 1.40').should    == three_values
+      Money.parse_array('USD 6.25, EUR 150.00, LVL 1.40').should       == three_values      
+      Money.parse_array('$6.25 as well as € 150.00 or 1.4 LVL').should == three_values
+      Money.parse_array('$6.25 and 150 EUR and Ls1.40').should         == three_values
+      Money.parse_array('$6.25, €150.00, Ls1.40').should               == three_values
+      Money.parse_array('$ 6.25 + € 150.00 + Ls 1.40').should          == three_values
+    end
+    
+    it "should return empty array for completely invalid input" do
+      empty_array = []
+      
+      Money.parse_array(nil).should          == empty_array
+      Money.parse_array('hellothere').should == empty_array
+      Money.parse_array('').should           == empty_array
+    end
+    
   end
 
   describe "Money.from_string" do

@@ -276,8 +276,10 @@ class Money
     # @example
     #   Money::Currency.new(:usd) #=> #<Money::Currency id: usd ...>
     def initialize(id)
-      @id  = id.to_s.downcase.to_sym
+      @id = id.to_s.downcase.to_sym
+      
       data = TABLE[@id] || raise(UnknownCurrency, "Unknown currency `#{id}'")
+      
       data.each_pair do |key, value|
         instance_variable_set(:"@#{key}", value)
       end
@@ -393,6 +395,33 @@ class Money
       def find(id)
         id = id.to_s.downcase.to_sym
         new(id) if self::TABLE[id]
+      end
+      
+      # Lookup a currency with given +symbol+ an returns a +Currency+ instance on
+      # success, +nil+ otherwise.
+      #
+      # @param [String] symbol Used to look into +TABLE+ and
+      # retrieve the applicable attributes.
+      #
+      # @return [Money::Currency]
+      #
+      # @example
+      #   Money::Currency.find_by_symbol('$') #=> #<Money::Currency id: usd ...>
+      #   Money::Currency.find_by_symbol('x') #=> nil
+      def find_by_symbol(symbol)
+        # Get filtered symbols from Currency Table
+        values = self::TABLE.select{ |k,v| v and v[:symbol] == symbol }
+                
+        # Sort by priority
+        sorted_values = values.sort{ |x, y| x[1][:priority] <=> y[1][:priority] } if values
+        
+        # Get first match
+        id_value_pair = sorted_values.first if sorted_values
+        
+        # Extract id
+        currency_id = id_value_pair.first if id_value_pair
+        
+        new(currency_id) if currency_id and self::TABLE[currency_id]
       end
 
       # Wraps the object in a +Currency+ unless it's already a +Currency+
