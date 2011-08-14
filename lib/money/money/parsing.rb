@@ -531,8 +531,8 @@ class Money
             # Resulting object with different regexp's
             @regexp = {
               :values => Regexp.new("(?:#{regexp_boundary_begin}(#{regexp_group})#{regexp_boundary_end})", Regexp::IGNORECASE),
-              :currency => Regexp.new("#{regexp_currency}"),
-              :cents => Regexp.new("#{regexp_number}")
+              :currency => Regexp.new("#{regexp_currency}", Regexp::IGNORECASE),
+              :cents => Regexp.new("#{regexp_number}", Regexp::IGNORECASE)
             }
           end
         end
